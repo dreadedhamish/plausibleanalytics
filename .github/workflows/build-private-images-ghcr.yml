@@ -25,7 +25,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5.0.0
         with:
-          images: ghcr.io/plausible/analytics/ee
+          images: dreadedhamish/analytics
           tags: |
             type=ref,event=pr
             type=ref,event=branch
@@ -56,12 +56,3 @@ jobs:
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
-
-      - name: Notify team on failure
-        if: ${{ failure() }}
-        uses: fjogeleit/http-request-action@v1
-        with:
-          url: ${{ secrets.BUILD_NOTIFICATION_URL }}
-          method: 'POST'
-          customHeaders: '{"Content-Type": "application/json"}'
-          data: '{"content": "<a href=\"https://github.com/plausible/analytics/actions/workflows/build-private-images.yml\">Build failed</a>"}'
