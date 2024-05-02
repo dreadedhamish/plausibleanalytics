@@ -16,8 +16,7 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
         "refresh_token" => refresh_token,
         "expires_at" => expires_at,
         "start_date" => start_date,
-        "end_date" => end_date,
-        "legacy" => legacy
+        "end_date" => end_date
       }) do
     site = conn.assigns.site
 
@@ -31,7 +30,6 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
       expires_at: expires_at,
       start_date: start_date,
       end_date: end_date,
-      legacy: legacy,
       layout: {PlausibleWeb.LayoutView, "focus.html"}
     )
   end
@@ -41,24 +39,18 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
         %{
           "access_token" => access_token,
           "refresh_token" => refresh_token,
-          "expires_at" => expires_at,
-          "legacy" => legacy
+          "expires_at" => expires_at
         } = params
       ) do
     site = conn.assigns.site
 
-    redirect_route =
-      if legacy == "true" do
-        Routes.site_path(conn, :settings_integrations, site.domain)
-      else
-        Routes.site_path(conn, :settings_imports_exports, site.domain)
-      end
+    redirect_route = Routes.site_path(conn, :settings_imports_exports, site.domain)
 
     result =
-      if legacy == "true" do
-        Google.UA.API.list_views(access_token)
-      else
+      if FunWithFlags.enabled?(:imports_exports, for: site) do
         Google.API.list_properties_and_views(access_token)
+      else
+        Google.UA.API.list_views(access_token)
       end
 
     error =
@@ -84,9 +76,16 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
           site: conn.assigns.site,
           properties_and_views: properties_and_views,
           selected_property_or_view_error: error,
-          legacy: legacy,
           layout: {PlausibleWeb.LayoutView, "focus.html"}
         )
+
+      {:error, :rate_limit_exceeded} ->
+        conn
+        |> put_flash(
+          :error,
+          "Google Analytics rate limit has been exceeded. Please try again later."
+        )
+        |> redirect(external: redirect_route)
 
       {:error, :authentication_failed} ->
         conn
@@ -123,18 +122,12 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
           "property_or_view" => property_or_view,
           "access_token" => access_token,
           "refresh_token" => refresh_token,
-          "expires_at" => expires_at,
-          "legacy" => legacy
+          "expires_at" => expires_at
         } = params
       ) do
     site = conn.assigns.site
 
-    redirect_route =
-      if legacy == "true" do
-        Routes.site_path(conn, :settings_integrations, site.domain)
-      else
-        Routes.site_path(conn, :settings_imports_exports, site.domain)
-      end
+    redirect_route = Routes.site_path(conn, :settings_imports_exports, site.domain)
 
     with {:ok, api_start_date} <-
            Google.API.get_analytics_start_date(access_token, property_or_view),
@@ -156,18 +149,25 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
             refresh_token: refresh_token,
             expires_at: expires_at,
             start_date: Date.to_iso8601(start_date),
-            end_date: Date.to_iso8601(end_date),
-            legacy: legacy
+            end_date: Date.to_iso8601(end_date)
           )
       )
     else
       {:error, error} when error in [:no_data, :no_time_window] ->
         params =
           params
-          |> Map.take(["access_token", "refresh_token", "expires_at", "legacy"])
+          |> Map.take(["access_token", "refresh_token", "expires_at"])
           |> Map.put("error", Atom.to_string(error))
 
         property_or_view_form(conn, params)
+
+      {:error, :rate_limit_exceeded} ->
+        conn
+        |> put_flash(
+          :error,
+          "Google Analytics rate limit has been exceeded. Please try again later."
+        )
+        |> redirect(external: redirect_route)
 
       {:error, :authentication_failed} ->
         conn
@@ -201,20 +201,14 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
         "refresh_token" => refresh_token,
         "expires_at" => expires_at,
         "start_date" => start_date,
-        "end_date" => end_date,
-        "legacy" => legacy
+        "end_date" => end_date
       }) do
     site = conn.assigns.site
 
     start_date = Date.from_iso8601!(start_date)
     end_date = Date.from_iso8601!(end_date)
 
-    redirect_route =
-      if legacy == "true" do
-        Routes.site_path(conn, :settings_integrations, site.domain)
-      else
-        Routes.site_path(conn, :settings_imports_exports, site.domain)
-      end
+    redirect_route = Routes.site_path(conn, :settings_imports_exports, site.domain)
 
     case Google.API.get_property_or_view(access_token, property_or_view) do
       {:ok, %{name: property_or_view_name, id: property_or_view}} ->
@@ -230,9 +224,16 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
           start_date: start_date,
           end_date: end_date,
           property?: Google.API.property?(property_or_view),
-          legacy: legacy,
           layout: {PlausibleWeb.LayoutView, "focus.html"}
         )
+
+      {:error, :rate_limit_exceeded} ->
+        conn
+        |> put_flash(
+          :error,
+          "Google Analytics rate limit has been exceeded. Please try again later."
+        )
+        |> redirect(external: redirect_route)
 
       {:error, :authentication_failed} ->
         conn
@@ -274,8 +275,7 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
         "end_date" => end_date,
         "access_token" => access_token,
         "refresh_token" => refresh_token,
-        "expires_at" => expires_at,
-        "legacy" => legacy
+        "expires_at" => expires_at
       }) do
     site = conn.assigns.site
     current_user = conn.assigns.current_user
@@ -283,12 +283,7 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
     start_date = Date.from_iso8601!(start_date)
     end_date = Date.from_iso8601!(end_date)
 
-    redirect_route =
-      if legacy == "true" do
-        Routes.site_path(conn, :settings_integrations, site.domain)
-      else
-        Routes.site_path(conn, :settings_imports_exports, site.domain)
-      end
+    redirect_route = Routes.site_path(conn, :settings_imports_exports, site.domain)
 
     import_opts = [
       label: property_or_view,
@@ -296,8 +291,7 @@ defmodule PlausibleWeb.GoogleAnalyticsController do
       end_date: end_date,
       access_token: access_token,
       refresh_token: refresh_token,
-      token_expires_at: expires_at,
-      legacy: legacy == "true"
+      token_expires_at: expires_at
     ]
 
     with {:ok, start_date, end_date} <- Imported.clamp_dates(site, start_date, end_date),
