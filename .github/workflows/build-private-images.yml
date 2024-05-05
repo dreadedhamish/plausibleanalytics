@@ -15,14 +15,14 @@ concurrency:
 jobs:
   build:
     if: ${{ github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'deploy-to-staging') }}
-    runs-on: buildjet-16vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
 
     steps:
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5.0.0
         with:
-          images: dreadedhamish/analytics
+          images: dreadedhamish/analytics-private
           tags: |
             type=ref,event=pr
             type=ref,event=branch
